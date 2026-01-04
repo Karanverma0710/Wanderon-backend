@@ -1,0 +1,158 @@
+const prisma = require('../config/prisma');
+const JWTUtil = require('../utils/jwt.util');
+const CryptoUtil = require('../utils/crypto.util');
+
+class TokenService {
+  async generateAuthTokens(user) {
+    const payload = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+    };
+
+    const accessToken = JWTUtil.generateAccessToken(payload);
+    const refreshToken = JWTUtil.generateRefreshToken({ id: user.id });
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        token: refreshToken,
+        expiresAt,
+      },
+    });
+
+    return { accessToken, refreshToken };
+  }
+
+  async verifyRefreshToken(token) {
+    const decoded = JWTUtil.verifyRefreshToken(token);
+
+    const refreshToken = await prisma.refreshToken.findUnique({
+      where: { token },
+    });
+
+    if (!refreshToken) {
+      throw new Error('Invalid refresh token');
+    }
+
+    if (refreshToken.isRevoked) {
+      throw new Error('Refresh token has been revoked');
+    }
+
+    if (CryptoUtil.isExpired(refreshToken.expiresAt)) {
+      throw new Error('Refresh token expired');
+    }
+
+    return decoded;
+  }
+
+  async refreshAccessToken(refreshToken) {
+    const decoded = await this.verifyRefreshToken(refreshToken);
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new Error('User not found or inactive');
+    }
+
+    const payload = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+    };
+
+    const accessToken = JWTUtil.generateAccessToken(payload);
+
+    return accessToken;
+  }
+
+  async revokeRefreshToken(token) {
+    return await prisma.refreshToken.update({
+      where: { token },
+      data: { isRevoked: true },
+    });
+  }
+
+  async revokeAllUserTokens(userId) {
+    return await prisma.refreshToken.updateMany({
+      where: { userId },
+      data: { isRevoked: true },
+    });
+  }
+
+  async cleanupExpiredTokens() {
+    const result = await prisma.refreshToken.deleteMany({
+      where: {
+        expiresAt: {
+          lt: new Date(),
+        },
+      },
+    });
+    return result.count;
+  }
+
+  async createPasswordResetToken(userId, email) {
+    await prisma.passwordReset.deleteMany({
+      where: {
+        email,
+        isUsed: false,
+      },
+    });
+
+    const token = CryptoUtil.generateToken(32);
+    const expiresAt = new Date(Date.now() + parseInt(process.env.RESET_TOKEN_EXPIRY));
+
+    const resetToken = await prisma.passwordReset.create({
+      data: {
+        userId,
+        email,
+        token,
+        expiresAt,
+      },
+    });
+
+    return resetToken;
+  }
+
+  async verifyPasswordResetToken(token) {
+    const resetToken = await prisma.passwordReset.findUnique({
+      where: { token },
+    });
+
+    if (!resetToken) {
+      throw new Error('Invalid reset token');
+    }
+
+    if (resetToken.isUsed) {
+      throw new Error('Reset token already used');
+    }
+
+    if (CryptoUtil.isExpired(resetToken.expiresAt)) {
+      throw new Error('Reset token has expired');
+    }
+
+    return resetToken;
+  }
+
+  async markResetTokenAsUsed(token) {
+    return await prisma.passwordReset.update({
+      where: { token },
+      data: { isUsed: true },
+    });
+  }
+}
+
+module.exports = new TokenService();
