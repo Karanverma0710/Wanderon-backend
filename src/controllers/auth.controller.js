@@ -70,10 +70,9 @@ class AuthController {
 
     await UserService.updateLastLogin(user.id);
 
-    res.cookie('accessToken', accessToken, JWTUtil.getAccessTokenCookieOptions());
-    res.cookie('refreshToken', refreshToken, JWTUtil.getCookieOptions());
+    JWTUtil.setTokenCookies(res, accessToken, refreshToken);
 
-    return ApiResponse.success(
+     return ApiResponse.success(
       res,
       {
         user: {
@@ -82,9 +81,10 @@ class AuthController {
           username: user.username,
           role: user.role,
           isVerified: user.isVerified,
+          isActive: user.isActive,
+          provider: user.provider,
+          avatar: user.avatar,
         },
-        accessToken,
-        refreshToken,
       },
       'Login successful'
     );
@@ -101,26 +101,37 @@ class AuthController {
       }
     }
 
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
+    JWTUtil.clearTokenCookies(res);
 
     return ApiResponse.success(res, null, 'Logout successful');
   });
 
-  refreshToken = asyncHandler(async (req, res) => {
+ refreshToken = asyncHandler(async (req, res) => {
     const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
     if (!refreshToken) {
       return ApiResponse.unauthorized(res, 'Refresh token required');
     }
 
-    const accessToken = await TokenService.refreshAccessToken(refreshToken);
+    const { accessToken, refreshToken: newRefreshToken, user } = 
+      await TokenService.refreshAccessToken(refreshToken);
 
-    res.cookie('accessToken', accessToken, JWTUtil.getAccessTokenCookieOptions());
+    JWTUtil.setTokenCookies(res, accessToken, newRefreshToken);
 
     return ApiResponse.success(
       res,
-      { accessToken },
+      { 
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          role: user.role,
+          isVerified: user.isVerified,
+          isActive: user.isActive,
+          provider: user.provider,
+          avatar: user.avatar,
+        }
+      },
       'Token refreshed successfully'
     );
   });
@@ -132,14 +143,30 @@ class AuthController {
       return ApiResponse.notFound(res, 'User not found');
     }
 
-    return ApiResponse.success(res, { user }, 'User retrieved successfully');
+    return ApiResponse.success(
+      res, 
+      { 
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          role: user.role,
+          isVerified: user.isVerified,
+          isActive: user.isActive,
+          provider: user.provider,
+          avatar: user.avatar,
+          lastLogin: user.lastLogin,
+          createdAt: user.createdAt,
+        }
+      }, 
+      'User retrieved successfully'
+    );
   });
 
   logoutAll = asyncHandler(async (req, res) => {
     await TokenService.revokeAllUserTokens(req.user.id);
 
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
+    JWTUtil.clearTokenCookies(res);
 
     return ApiResponse.success(
       res,

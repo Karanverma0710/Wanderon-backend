@@ -1,6 +1,8 @@
 const UserService = require('../services/user.service');
 const OTPService = require('../services/otp.service');
 const EmailService = require('../services/email.service');
+const TokenService = require('../services/token.service');
+const JWTUtil = require('../utils/jwt.util');
 const ApiResponse = require('../utils/response.util');
 const { asyncHandler } = require('../middlewares/error.middleware');
 
@@ -58,14 +60,23 @@ class OTPController {
 
     await EmailService.sendWelcomeEmail(user.email, user.username);
 
+   const { accessToken, refreshToken } = await TokenService.generateAuthTokens(user);
+
+    JWTUtil.setTokenCookies(res, accessToken, refreshToken);
+
+    const updatedUser = await UserService.findUserById(user.id);
+
     return ApiResponse.success(
       res,
       { 
         user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          isVerified: true,
+          id: updatedUser.id,
+          email: updatedUser.email,
+          username: updatedUser.username,
+          role: updatedUser.role,
+          isVerified: updatedUser.isVerified,
+          isActive: updatedUser.isActive,
+          provider: updatedUser.provider,
         },
       },
       'Email verified successfully'

@@ -18,8 +18,7 @@ class OAuthController {
 
     await UserService.updateLastLogin(user.id);
 
-    res.cookie('accessToken', accessToken, JWTUtil.getAccessTokenCookieOptions());
-    res.cookie('refreshToken', refreshToken, JWTUtil.getCookieOptions());
+    JWTUtil.setTokenCookies(res, accessToken, refreshToken);
 
     return res.redirect(
       `${process.env.FRONTEND_URL}/auth/callback?success=true`
@@ -37,8 +36,7 @@ class OAuthController {
 
     await UserService.updateLastLogin(user.id);
 
-    res.cookie('accessToken', accessToken, JWTUtil.getAccessTokenCookieOptions());
-    res.cookie('refreshToken', refreshToken, JWTUtil.getCookieOptions());
+    JWTUtil.setTokenCookies(res, accessToken, refreshToken);
 
     return ApiResponse.success(
       res,
@@ -50,16 +48,16 @@ class OAuthController {
           role: user.role,
           avatar: user.avatar,
           isVerified: user.isVerified,
+          isActive: user.isActive,
+          provider: user.provider,
         },
-        accessToken,
-        refreshToken,
       },
       'Google authentication successful'
     );
   });
 
   unlinkGoogle = asyncHandler(async (req, res) => {
-    const user = await UserService.findUserById(req.user.id);
+    const user = await UserService.findUserByEmail(req.user.email);
 
     if (!user.password) {
       return ApiResponse.error(

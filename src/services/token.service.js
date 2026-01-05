@@ -5,14 +5,14 @@ const CryptoUtil = require('../utils/crypto.util');
 class TokenService {
   async generateAuthTokens(user) {
     const payload = {
-      id: user.id,
+      userId: user.id, 
       email: user.email,
       username: user.username,
       role: user.role,
     };
 
     const accessToken = JWTUtil.generateAccessToken(payload);
-    const refreshToken = JWTUtil.generateRefreshToken({ id: user.id });
+    const refreshToken = JWTUtil.generateRefreshToken({ userId: user.id }); 
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -53,13 +53,16 @@ class TokenService {
     const decoded = await this.verifyRefreshToken(refreshToken);
 
     const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+      where: { id: decoded.userId }, 
       select: {
         id: true,
         email: true,
         username: true,
         role: true,
         isActive: true,
+        isVerified: true,
+        avatar: true,
+        provider: true,
       },
     });
 
@@ -68,27 +71,54 @@ class TokenService {
     }
 
     const payload = {
-      id: user.id,
+      userId: user.id, 
       email: user.email,
       username: user.username,
       role: user.role,
     };
 
-    const accessToken = JWTUtil.generateAccessToken(payload);
+    const newAccessToken = JWTUtil.generateAccessToken(payload);
 
-    return accessToken;
+    const newRefreshToken = JWTUtil.generateRefreshToken({ userId: user.id });
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await prisma.refreshToken.update({
+      where: { token: refreshToken },
+      data: { isRevoked: true },
+    });
+
+    await prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        token: newRefreshToken,
+        expiresAt,
+      },
+    });
+
+    return { 
+      accessToken: newAccessToken, 
+      refreshToken: newRefreshToken,
+      user 
+    };
   }
 
   async revokeRefreshToken(token) {
-    return await prisma.refreshToken.update({
-      where: { token },
-      data: { isRevoked: true },
-    });
+    try {
+      return await prisma.refreshToken.update({
+        where: { token },
+        data: { isRevoked: true },
+      });
+    } catch (error) {
+      console.log('Token revocation failed:', error.message);
+    }
   }
 
   async revokeAllUserTokens(userId) {
     return await prisma.refreshToken.updateMany({
-      where: { userId },
+      where: { 
+        userId,
+        isRevoked: false,
+      },
       data: { isRevoked: true },
     });
   }
@@ -96,9 +126,16 @@ class TokenService {
   async cleanupExpiredTokens() {
     const result = await prisma.refreshToken.deleteMany({
       where: {
-        expiresAt: {
-          lt: new Date(),
-        },
+        OR: [
+          {
+            expiresAt: {
+              lt: new Date(),
+            },
+          },
+          {
+            isRevoked: true,
+          },
+        ],
       },
     });
     return result.count;
