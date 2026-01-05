@@ -20,8 +20,18 @@ class OAuthController {
 
     JWTUtil.setTokenCookies(res, accessToken, refreshToken);
 
+    const userData = encodeURIComponent(JSON.stringify({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      isVerified: user.isVerified,
+      provider: user.provider,
+      avatar: user.avatar,
+    }));
+
     return res.redirect(
-      `${process.env.FRONTEND_URL}/auth/callback?success=true`
+      `${process.env.FRONTEND_URL}/auth/callback?success=true&user=${userData}&access_token=${accessToken}&refresh_token=${refreshToken}`
     );
   });
 
@@ -51,13 +61,19 @@ class OAuthController {
           isActive: user.isActive,
           provider: user.provider,
         },
+        accessToken,
+        refreshToken,
       },
       'Google authentication successful'
     );
   });
 
   unlinkGoogle = asyncHandler(async (req, res) => {
-    const user = await UserService.findUserByEmail(req.user.email);
+    const user = await UserService.findUserById(req.user.id);
+
+    if (!user) {
+      return ApiResponse.notFound(res, 'User not found');
+    }
 
     if (!user.password) {
       return ApiResponse.error(
