@@ -72,7 +72,7 @@ class AuthController {
 
     JWTUtil.setTokenCookies(res, accessToken, refreshToken);
 
-     return ApiResponse.success(
+    return ApiResponse.success(
       res,
       {
         user: {
@@ -85,6 +85,8 @@ class AuthController {
           provider: user.provider,
           avatar: user.avatar,
         },
+        accessToken,
+        refreshToken,
       },
       'Login successful'
     );
@@ -106,7 +108,7 @@ class AuthController {
     return ApiResponse.success(res, null, 'Logout successful');
   });
 
- refreshToken = asyncHandler(async (req, res) => {
+  refreshToken = asyncHandler(async (req, res) => {
     const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
     if (!refreshToken) {
@@ -130,7 +132,9 @@ class AuthController {
           isActive: user.isActive,
           provider: user.provider,
           avatar: user.avatar,
-        }
+        },
+        accessToken,
+        refreshToken: newRefreshToken,
       },
       'Token refreshed successfully'
     );
