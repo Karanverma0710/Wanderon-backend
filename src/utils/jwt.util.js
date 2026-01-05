@@ -60,11 +60,11 @@ class JWTUtil {
     const isProduction = process.env.NODE_ENV === 'production';
     
     return {
-      httpOnly: true, 
-      secure: isProduction, 
-      sameSite: isProduction ? 'none' : 'lax', 
-      maxAge: 7 * 24 * 60 * 60 * 1000, 
-      path: '/', 
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
     };
   }
 
@@ -72,18 +72,16 @@ class JWTUtil {
     const isProduction = process.env.NODE_ENV === 'production';
     
     return {
-      httpOnly: true, 
-      secure: isProduction, 
-      sameSite: isProduction ? 'none' : 'lax', 
-      maxAge: 30 * 60 * 1000, 
-      path: '/', 
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 30 * 60 * 1000,
+      path: '/',
     };
   }
 
   static setTokenCookies(res, accessToken, refreshToken) {
-    
     res.cookie('accessToken', accessToken, this.getAccessTokenCookieOptions());
-    
     res.cookie('refreshToken', refreshToken, this.getCookieOptions());
   }
 
