@@ -7,7 +7,6 @@ const prisma = new PrismaClient({
   errorFormat: 'minimal',
 });
 
-// Connection test
 prisma.$connect()
   .then(() => {
     console.log('Database connected successfully');
@@ -17,7 +16,6 @@ prisma.$connect()
     process.exit(1);
   });
 
-// Graceful shutdown handler
 process.on('beforeExit', async () => {
   await prisma.$disconnect();
 });

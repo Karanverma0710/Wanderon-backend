@@ -17,9 +17,11 @@ const authenticate = asyncHandler(async (req, res, next) => {
   }
 
   try {
+    
     const decoded = JWTUtil.verifyAccessToken(token);
 
-    const user = await UserService.findUserById(decoded.id);
+    
+    const user = await UserService.findUserById(decoded.userId || decoded.id);
 
     if (!user) {
       return ApiResponse.unauthorized(res, 'User not found');
@@ -29,13 +31,34 @@ const authenticate = asyncHandler(async (req, res, next) => {
       return ApiResponse.forbidden(res, 'Account has been deactivated');
     }
 
-    req.user = user;
+   
+    req.user = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      isActive: user.isActive,
+      isVerified: user.isVerified,
+      provider: user.provider,
+    };
+
     next();
   } catch (error) {
-    if (error.message.includes('expired')) {
-      return ApiResponse.unauthorized(res, 'Token expired, please login again');
+   
+    if (error.message === 'Access token expired' || error.message.includes('expired')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token expired',
+        code: 'TOKEN_EXPIRED', 
+      });
     }
-    return ApiResponse.unauthorized(res, 'Invalid token');
+
+    
+    if (error.message === 'Invalid access token' || error.message.includes('invalid')) {
+      return ApiResponse.unauthorized(res, 'Invalid token');
+    }
+
+    return ApiResponse.unauthorized(res, 'Authentication failed');
   }
 });
 
@@ -71,13 +94,21 @@ const optionalAuth = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = JWTUtil.verifyAccessToken(token);
-    const user = await UserService.findUserById(decoded.id);
+    const user = await UserService.findUserById(decoded.userId || decoded.id);
 
     if (user && user.isActive) {
-      req.user = user;
+      req.user = {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        isActive: user.isActive,
+        isVerified: user.isVerified,
+        provider: user.provider,
+      };
     }
   } catch (error) {
-    // Ignore token errors for optional auth
+    console.log('Optional auth token error:', error.message);
   }
 
   next();
@@ -106,11 +137,11 @@ const checkOwnership = (resourceKey = 'id') => {
 
     const resourceId = req.params[resourceKey] || req.body[resourceKey];
 
-    if (req.user.role === 'admin') {
+     if (req.user.role === 'admin') {
       return next();
     }
 
-    if (resourceId !== req.user.id) {
+     if (resourceId !== req.user.id) {
       return ApiResponse.forbidden(
         res,
         'You can only access your own resources'
@@ -121,10 +152,52 @@ const checkOwnership = (resourceKey = 'id') => {
   };
 };
 
+const authenticateRefreshToken = asyncHandler(async (req, res, next) => {
+  const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+  if (!refreshToken) {
+    return ApiResponse.unauthorized(res, 'Refresh token required');
+  }
+
+  try {
+    const decoded = JWTUtil.verifyRefreshToken(refreshToken);
+
+    const user = await UserService.findUserById(decoded.userId || decoded.id);
+
+    if (!user) {
+      return ApiResponse.unauthorized(res, 'User not found');
+    }
+
+    if (!user.isActive) {
+      return ApiResponse.forbidden(res, 'Account has been deactivated');
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      isActive: user.isActive,
+      isVerified: user.isVerified,
+      provider: user.provider,
+    };
+
+    req.refreshToken = refreshToken;
+    next();
+  } catch (error) {
+    if (error.message === 'Refresh token expired' || error.message.includes('expired')) {
+      return ApiResponse.unauthorized(res, 'Refresh token expired. Please login again');
+    }
+
+    return ApiResponse.unauthorized(res, 'Invalid refresh token');
+  }
+});
+
 module.exports = {
   authenticate,
   authorize,
   optionalAuth,
   requireVerified,
   checkOwnership,
+  authenticateRefreshToken,
 };
